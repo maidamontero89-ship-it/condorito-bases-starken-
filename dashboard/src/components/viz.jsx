@@ -162,7 +162,7 @@ export function Heatmap({ rows }) {
             <div className="mb-1.5 flex gap-[3px] text-[10px] leading-3 text-muted">
               {weeks.map((w, i) => (
                 <span key={i} className="w-3 overflow-visible whitespace-nowrap">
-                  {i === 0 || w[0].m !== weeks[i - 1][0].m ? MES[w[0].m] : ''}
+                  {i === 0 || w[6].m !== weeks[i - 1][6].m ? MES[w[6].m] : ''}
                 </span>
               ))}
             </div>
@@ -202,12 +202,26 @@ export function Dock({ ready }) {
   const [active, setActive] = useState('pulso')
   useEffect(() => {
     if (!ready) return
-    const obs = new IntersectionObserver(
-      (entries) => entries.forEach((e) => e.isIntersecting && setActive(e.target.id)),
-      { rootMargin: '-35% 0px -60% 0px' },
-    )
-    SECCIONES.forEach(([id]) => { const el = document.getElementById(id); if (el) obs.observe(el) })
-    return () => obs.disconnect()
+    let raf = 0
+    const update = () => {
+      raf = 0
+      const limite = window.innerHeight * 0.4
+      let actual = SECCIONES[0][0]
+      for (const [id] of SECCIONES) {
+        const el = document.getElementById(id)
+        if (el && el.getBoundingClientRect().top <= limite) actual = id
+      }
+      setActive(actual)
+    }
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update) }
+    update()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+      if (raf) cancelAnimationFrame(raf)
+    }
   }, [ready])
 
   return (
