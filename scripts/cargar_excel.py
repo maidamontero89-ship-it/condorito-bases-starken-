@@ -117,10 +117,16 @@ def leer_excel():
     wb = openpyxl.load_workbook(EXCEL, read_only=True, data_only=True)
     filas = wb[HOJA].iter_rows(values_only=True)
     encabezado = [texto(c) for c in next(filas)]
-    if encabezado[: len(COLUMNAS)] != COLUMNAS:
-        faltan = [c for c in COLUMNAS if c not in encabezado]
+    # La 1ª columna se valida por contenido (PED-...), por si el título de A1 fue editado.
+    if encabezado[1 : len(COLUMNAS)] != COLUMNAS[1:]:
+        faltan = [c for c in COLUMNAS[1:] if c not in encabezado]
         raise SystemExit(f"Encabezados distintos a los esperados. Faltan: {faltan}")
+    if encabezado[0] != COLUMNAS[0]:
+        print(f"  Aviso: la celda A1 dice '{encabezado[0]}' (se esperaba '{COLUMNAS[0]}')")
     datos = [dict(zip(COLUMNAS, f)) for f in filas if f and f[0] is not None]
+    malos = [d["ID Pedido"] for d in datos if not str(d["ID Pedido"]).startswith("PED-")]
+    if malos:
+        raise SystemExit(f"La primera columna no contiene IDs de pedido válidos: {malos[:5]}")
     wb.close()
     print(f"  {len(datos)} filas leídas")
     return datos
