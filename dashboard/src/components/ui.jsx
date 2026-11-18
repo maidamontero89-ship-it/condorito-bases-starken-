@@ -3,9 +3,34 @@ import { motion } from 'motion/react'
 
 export const PALETTE = ['#c6ff3d', '#8b6cff', '#4cc9ff', '#ff6b4a', '#f2e8d5', '#ff9de2', '#5eead4', '#facc15']
 
+function spotlight(e) {
+  const r = e.currentTarget.getBoundingClientRect()
+  e.currentTarget.style.setProperty('--mx', `${e.clientX - r.left}px`)
+  e.currentTarget.style.setProperty('--my', `${e.clientY - r.top}px`)
+}
+
+export function SectionHeader({ id, n, title, kicker }) {
+  return (
+    <div id={id} className="scroll-mt mb-6 mt-24 flex flex-col gap-3 border-b border-white/10 pb-5 md:flex-row md:items-end md:justify-between">
+      <motion.div
+        className="flex items-end gap-4 sm:gap-6"
+        initial={{ opacity: 0, x: -20 }}
+        whileInView={{ opacity: 1, x: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <span className="text-outline font-display text-6xl font-bold leading-[0.8] sm:text-8xl">{n}</span>
+        <h2 className="font-display text-3xl font-bold leading-none tracking-[-0.035em] sm:text-5xl">{title}</h2>
+      </motion.div>
+      <p className="max-w-sm text-sm text-muted md:text-right">{kicker}</p>
+    </div>
+  )
+}
+
 export function Card({ className = '', children, delay = 0 }) {
   return (
     <motion.section
+      onMouseMove={spotlight}
       className={`card ${className}`}
       initial={{ opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}

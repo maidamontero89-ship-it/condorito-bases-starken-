@@ -1,13 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { motion } from 'motion/react'
+import { AnimatePresence, motion, useScroll, useSpring } from 'motion/react'
 import {
   Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import { ArrowUpRight, Database, RotateCcw, Search } from 'lucide-react'
+import { ArrowUpRight, Database, RotateCcw, Search, Sparkles } from 'lucide-react'
 import { fetchPedidos, fmt, groupBy, kpis, mesLabel, toSortedArray } from './lib/data.js'
-import { BarList, Card, CardHeader, ChartTooltip, Chips, CountUp, PALETTE } from './components/ui.jsx'
+import { BarList, Card, CardHeader, ChartTooltip, Chips, CountUp, PALETTE, SectionHeader } from './components/ui.jsx'
+import { Dock, Heatmap, Insights, Territorio, ZONA_COLOR, buildInsights } from './components/viz.jsx'
 
 const TODAS = 'Todas'
 const TODOS = 'Todos'
@@ -17,6 +18,8 @@ const ESTADO_COLOR = {
   Entregado: '#c6ff3d', 'Con Incidencia': '#ff6b4a', 'Devuelto a Origen': '#ff9de2', Siniestrado: '#ef4444',
   'En Reparto': '#4cc9ff', 'En Tránsito': '#8b6cff', 'Disponible para Retiro': '#f2e8d5', 'Recibido en Sucursal': '#5eead4',
 }
+const PALABRAS = ['en un vistazo.', 'en tiempo real.', 'sin fricción.', 'de norte a sur.']
+const EASE = [0.22, 1, 0.36, 1]
 const axis = { stroke: '#5c5c68', fontSize: 11, tickLine: false, axisLine: false }
 
 export default function App() {
@@ -48,6 +51,7 @@ export default function App() {
   )
 
   const k = useMemo(() => kpis(filtradas), [filtradas])
+  const insights = useMemo(() => buildInsights(filtradas), [filtradas])
   const hayFiltros = zona !== TODAS || servicio !== TODOS || canal !== TODOS || desde || hasta
   const limpiar = () => { setZona(TODAS); setServicio(TODOS); setCanal(TODOS); setDesde(''); setHasta('') }
 
@@ -57,7 +61,6 @@ export default function App() {
     return [...n.keys()].sort().map((m) => ({ mes: mesLabel(m), ventas: v.get(m), pedidos: n.get(m) }))
   }, [filtradas])
 
-  const porRegion = useMemo(() => toSortedArray(groupBy(filtradas, (r) => r.region_destino)), [filtradas])
   const porServicio = useMemo(() => toSortedArray(groupBy(filtradas, (r) => r.tipo_servicio)), [filtradas])
   const porCanal = useMemo(() => toSortedArray(groupBy(filtradas, (r) => r.canal_venta, (r) => r.total_con_iva_clp)), [filtradas])
   const porEstado = useMemo(() => toSortedArray(groupBy(filtradas, (r) => r.estado)), [filtradas])
@@ -68,9 +71,11 @@ export default function App() {
     const tot = groupBy(filtradas, (r) => (r.cumple_sla === null ? null : r.zona_destino))
     return ['Norte', 'Centro', 'Sur', 'Austral'].filter((z) => tot.get(z)).map((z) => ({ name: z, value: si.get(z) / tot.get(z) }))
   }, [filtradas])
+  const regiones = useMemo(() => new Set(filtradas.map((r) => r.region_destino)).size, [filtradas])
 
   return (
     <div className="relative">
+      <ScrollProgress />
       <div className="aurora" aria-hidden />
 
       {/* ------------------------------------------------ Nav */}
@@ -91,38 +96,15 @@ export default function App() {
         </div>
       </header>
 
-      <main className="relative z-10 mx-auto max-w-[1400px] px-4 pb-24 sm:px-8">
-        {/* ------------------------------------------------ Hero */}
-        <section className="pb-10 pt-8 sm:pt-14">
-          <motion.p
-            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}
-            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-[#c9c9d3]"
-          >
-            <Database size={12} className="text-lime" /> Dataset sintético y anonimizado · 2026
-          </motion.p>
-          <motion.h1
-            initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
-            className="mt-6 font-display text-[clamp(2.6rem,8vw,7.5rem)] font-bold leading-[0.9] tracking-[-0.04em]"
-          >
-            Cada envío,<br />
-            <span className="text-outline">en un</span>{' '}
-            <span className="bg-gradient-to-r from-lime via-[#e5ffb0] to-violet bg-clip-text text-transparent">vistazo.</span>
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4, duration: 0.8 }}
-            className="mt-6 max-w-xl text-base text-[#a8a8b4] sm:text-lg"
-          >
-            Ventas, cumplimiento y operación de {fmt.num(rows.length || 10000)} pedidos de courier en Chile.
-            Filtra por zona, servicio, canal o período y todo se recalcula al instante.
-          </motion.p>
-        </section>
+      <main className="relative z-10 mx-auto max-w-[1400px] px-4 pb-32 sm:px-8">
+        <Hero total={rows.length} k={k} ready={!isLoading} />
 
         {error && (
           <div className="card mb-8 p-6 text-coral">No se pudieron cargar los datos: {String(error.message ?? error)}</div>
         )}
 
         {/* ------------------------------------------------ Filtros */}
-        <div className="card z-20 mb-6 lg:sticky lg:top-3 flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="liquid z-30 mb-2 flex flex-col gap-4 rounded-[1.75rem] p-4 sm:p-5 lg:sticky lg:top-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-6">
             <Chips options={ZONAS} value={zona} onChange={setZona} />
             <span className="hidden h-6 w-px bg-white/10 md:block" />
@@ -140,23 +122,24 @@ export default function App() {
               <option value="">Hasta</option>
               {meses.map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
             </select>
-            {hayFiltros && (
-              <button type="button" className="chip" onClick={limpiar}>Limpiar</button>
-            )}
+            {hayFiltros && <button type="button" className="chip" onClick={limpiar}>Limpiar</button>}
           </div>
         </div>
 
         {isLoading ? (
           <Skeleton />
+        ) : filtradas.length === 0 ? (
+          <div className="card mt-10 p-10 text-center text-muted">No hay pedidos para esta combinación de filtros.</div>
         ) : (
           <>
-            {/* ------------------------------------------------ KPIs bento */}
+            {/* ================================================ 01 Pulso */}
+            <SectionHeader id="pulso" n="01" title="Pulso" kicker="Los indicadores que importan, recalculados con cada filtro." />
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
               <Card className="col-span-2 row-span-2 flex flex-col justify-between overflow-hidden p-6 sm:p-8">
                 <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-lime/20 blur-3xl" aria-hidden />
                 <p className="text-[11px] uppercase tracking-[0.18em] text-muted">Ventas con IVA</p>
                 <div>
-                  <p className="font-display text-[clamp(2.6rem,6vw,5.5rem)] font-bold leading-none tracking-[-0.04em] text-lime">
+                  <p className="font-display text-[clamp(2.8rem,7vw,6rem)] font-bold leading-none tracking-[-0.045em] text-lime">
                     <CountUp value={k.ventas} format={fmt.clpCompact} />
                   </p>
                   <p className="mt-3 text-sm text-[#a8a8b4]">
@@ -183,25 +166,18 @@ export default function App() {
               <Kpi label="Calificación cliente" value={k.calificacion} format={(v) => `${fmt.dec1(v)} / 5`} accent="text-sky" delay={0.2} />
             </div>
 
-            {/* ------------------------------------------------ Marquee */}
-            <div className="my-8 overflow-hidden border-y border-white/10 py-4">
-              <div className="marquee font-display text-2xl font-semibold tracking-tight sm:text-3xl">
-                {[0, 1].map((dup) => (
-                  <div key={dup} className="flex shrink-0 items-center gap-10 pr-10" aria-hidden={dup === 1}>
-                    <span>{fmt.num(k.pedidos)} pedidos</span><Star />
-                    <span className="text-outline">{fmt.pct(k.incidencias)} con incidencia</span><Star />
-                    <span>{fmt.dec1(k.transito)} días hábiles de tránsito promedio</span><Star />
-                    <span className="text-outline">{porRegion.length} regiones de destino</span><Star />
-                    <span>{fmt.pct(k.sla)} a tiempo</span><Star />
-                  </div>
-                ))}
-              </div>
+            <div className="mb-4 mt-10 flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted">
+              <Sparkles size={14} className="text-lime" /> Insights automáticos
             </div>
+            <Insights items={insights} />
 
-            {/* ------------------------------------------------ Gráficos */}
+            <Marquee k={k} regiones={regiones} />
+
+            {/* ================================================ 02 Tendencia */}
+            <SectionHeader id="tendencia" n="02" title="Tendencia" kicker="Cómo se mueve el negocio mes a mes y día a día." />
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
               <Card className="lg:col-span-8">
-                <CardHeader eyebrow="Tendencia" title="Ventas y pedidos por mes" />
+                <CardHeader eyebrow="Mensual" title="Ventas y pedidos por mes" />
                 <div className="h-80 px-2 pb-4 pt-4">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={porMes} margin={{ top: 10, right: 16, left: 8, bottom: 0 }}>
@@ -222,22 +198,41 @@ export default function App() {
                   </ResponsiveContainer>
                 </div>
               </Card>
-
               <Card className="lg:col-span-4" delay={0.05}>
                 <CardHeader eyebrow="Mix" title="Tipo de servicio" />
                 <Donut data={porServicio} format={fmt.num} centerLabel="pedidos" />
               </Card>
+              <Card className="lg:col-span-12" delay={0.05}>
+                <CardHeader eyebrow="Diario" title="Calendario de actividad 2026" right={<span className="text-xs text-muted">Pedidos emitidos por día</span>} />
+                <Heatmap rows={filtradas} />
+              </Card>
+            </div>
 
-              <Card className="lg:col-span-5" delay={0.05}>
-                <CardHeader eyebrow="Cobertura" title="Pedidos por región de destino" />
-                <div className="max-h-[420px] overflow-y-auto px-6 pb-6 pt-5">
-                  <BarList data={porRegion} format={fmt.num} color={(d, i) => (i < 3 ? '#c6ff3d' : 'rgba(198,255,61,0.45)')} />
+            {/* ================================================ 03 Territorio */}
+            <SectionHeader id="territorio" n="03" title="Territorio" kicker="Chile de norte a sur: dónde llegan los envíos y qué tan a tiempo." />
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+              <Card className="lg:col-span-6 lg:row-span-2">
+                <CardHeader eyebrow="Destino" title="Pedidos por región" />
+                <Territorio rows={filtradas} />
+              </Card>
+              <Card className="lg:col-span-6" delay={0.05}>
+                <CardHeader eyebrow="Calidad" title="Cumplimiento SLA por zona" />
+                <div className="px-6 pb-6 pt-5">
+                  <BarList data={slaZona} format={fmt.pct} max={1} color={(d) => ZONA_COLOR[d.name]} />
                 </div>
               </Card>
+              <Card className="lg:col-span-6" delay={0.1}>
+                <CardHeader eyebrow="Canales" title="Ventas por canal" />
+                <Donut data={porCanal} format={fmt.clpCompact} centerLabel="ventas" compact />
+              </Card>
+            </div>
 
-              <Card className="lg:col-span-7" delay={0.1}>
-                <CardHeader eyebrow="Operación" title="Estado de los envíos" />
-                <div className="h-[380px] px-2 pb-4 pt-4">
+            {/* ================================================ 04 Operación */}
+            <SectionHeader id="operacion" n="04" title="Operación" kicker="Estados, fricciones y qué se mueve en cada bulto." />
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+              <Card className="lg:col-span-7">
+                <CardHeader eyebrow="Seguimiento" title="Estado de los envíos" />
+                <div className="h-[360px] px-2 pb-4 pt-4">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={porEstado} layout="vertical" margin={{ top: 0, right: 24, left: 8, bottom: 0 }}>
                       <XAxis type="number" {...axis} tickFormatter={fmt.num} />
@@ -250,26 +245,12 @@ export default function App() {
                   </ResponsiveContainer>
                 </div>
               </Card>
-
-              <Card className="lg:col-span-4" delay={0.05}>
-                <CardHeader eyebrow="Canales" title="Ventas por canal" />
-                <Donut data={porCanal} format={fmt.clpCompact} centerLabel="ventas" />
-              </Card>
-
-              <Card className="lg:col-span-4" delay={0.1}>
-                <CardHeader eyebrow="Calidad" title="Cumplimiento SLA por zona" />
-                <div className="px-6 pb-6 pt-5">
-                  <BarList data={slaZona} format={fmt.pct} max={1} color={(d, i) => PALETTE[(i + 1) % PALETTE.length]} />
-                </div>
-              </Card>
-
-              <Card className="lg:col-span-4" delay={0.15}>
+              <Card className="lg:col-span-5" delay={0.05}>
                 <CardHeader eyebrow="Fricción" title="Motivos de incidencia" />
                 <div className="px-6 pb-6 pt-5">
-                  <BarList data={porMotivo.slice(0, 7)} format={fmt.num} color="#ff6b4a" />
+                  <BarList data={porMotivo.slice(0, 8)} format={fmt.num} color="#ff6b4a" />
                 </div>
               </Card>
-
               <Card className="lg:col-span-12" delay={0.05}>
                 <CardHeader eyebrow="Carga" title="Ventas por contenido declarado (top 8)" />
                 <div className="h-72 px-2 pb-4 pt-4">
@@ -288,18 +269,122 @@ export default function App() {
               </Card>
             </div>
 
+            {/* ================================================ 05 Explorador */}
+            <SectionHeader id="explorador" n="05" title="Explorador" kicker="Busca cualquier pedido por ID, comuna, estado o contenido." />
             <Explorer rows={filtradas} />
           </>
         )}
 
-        <footer className="mt-16 flex flex-col gap-2 border-t border-white/10 pt-6 text-xs text-muted sm:flex-row sm:justify-between">
-          <p>Datos 100% sintéticos y anonimizados, con fines de análisis. No corresponden a personas reales.</p>
-          <p>
-            {data?.fetchedAt && <>Actualizado {data.fetchedAt.toLocaleString('es-CL')} · </>}
-            React · Supabase
-          </p>
+        <footer className="mt-24 border-t border-white/10 pt-10">
+          <p className="text-outline select-none font-display text-[clamp(3rem,15vw,13rem)] font-bold leading-[0.8] tracking-[-0.05em]">condorito</p>
+          <div className="mt-8 flex flex-col gap-2 text-xs text-muted sm:flex-row sm:justify-between">
+            <p>Datos 100% sintéticos y anonimizados, con fines de análisis. No corresponden a personas reales.</p>
+            <p>
+              {data?.fetchedAt && <>Actualizado {data.fetchedAt.toLocaleString('es-CL')} · </>}
+              React · Supabase
+            </p>
+          </div>
         </footer>
       </main>
+
+      <Dock ready={!isLoading && filtradas.length > 0} />
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------ piezas
+function ScrollProgress() {
+  const { scrollYProgress } = useScroll()
+  const scaleX = useSpring(scrollYProgress, { stiffness: 140, damping: 30 })
+  return <motion.div style={{ scaleX }} className="fixed inset-x-0 top-0 z-50 h-[3px] origin-left bg-gradient-to-r from-lime via-sky to-violet" />
+}
+
+function Hero({ total, k, ready }) {
+  const [w, setW] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setW((x) => (x + 1) % PALABRAS.length), 2600)
+    return () => clearInterval(t)
+  }, [])
+  const linea1 = ['Cada', 'envío,']
+
+  return (
+    <section className="grid gap-10 pb-12 pt-8 sm:pt-14 lg:grid-cols-12 lg:items-end">
+      <div className="lg:col-span-8">
+        <motion.p
+          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}
+          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-[#c9c9d3]"
+        >
+          <Database size={12} className="text-lime" /> Dataset sintético y anonimizado · noviembre 2026
+        </motion.p>
+        <h1 className="mt-6 font-display text-[clamp(2.8rem,9vw,8.5rem)] font-bold leading-[0.88] tracking-[-0.05em]">
+          <span className="block">
+            {linea1.map((p, i) => (
+              <span key={p} className="mr-[0.22em] inline-block overflow-hidden pb-[0.08em] align-bottom">
+                <motion.span
+                  className="inline-block"
+                  initial={{ y: '110%' }} animate={{ y: 0 }}
+                  transition={{ duration: 0.9, delay: 0.1 + i * 0.08, ease: EASE }}
+                >
+                  {p}
+                </motion.span>
+              </span>
+            ))}
+          </span>
+          <span className="relative block h-[1.02em] overflow-hidden pb-[0.08em]">
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={w}
+                className="absolute left-0 top-0 inline-block whitespace-nowrap bg-gradient-to-r from-lime via-[#e5ffb0] to-violet bg-clip-text text-transparent"
+                initial={{ y: '100%', opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: '-100%', opacity: 0 }}
+                transition={{ duration: 0.55, ease: EASE }}
+              >
+                {PALABRAS[w]}
+              </motion.span>
+            </AnimatePresence>
+          </span>
+        </h1>
+        <motion.p
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5, duration: 0.8 }}
+          className="mt-6 max-w-xl text-base text-[#a8a8b4] sm:text-lg"
+        >
+          Ventas, cumplimiento y operación de {fmt.num(total || 10000)} pedidos de courier en Chile.
+          Filtra y todo se recalcula al instante.
+        </motion.p>
+      </div>
+
+      <motion.div
+        className="liquid grid grid-cols-3 gap-px overflow-hidden rounded-[1.75rem] lg:col-span-4"
+        initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.9, ease: EASE }}
+      >
+        {[
+          ['Pedidos', ready ? <CountUp value={k.pedidos} format={fmt.num} /> : '—'],
+          ['A tiempo', ready ? <CountUp value={k.sla} format={fmt.pct} /> : '—'],
+          ['Nota', ready ? <CountUp value={k.calificacion} format={fmt.dec1} /> : '—'],
+        ].map(([label, v]) => (
+          <div key={label} className="bg-white/[0.02] px-4 py-5 text-center">
+            <p className="font-display text-2xl font-bold tracking-tight sm:text-3xl">{v}</p>
+            <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-muted">{label}</p>
+          </div>
+        ))}
+      </motion.div>
+    </section>
+  )
+}
+
+function Marquee({ k, regiones }) {
+  return (
+    <div className="mt-14 overflow-hidden border-y border-white/10 py-5">
+      <div className="marquee font-display text-3xl font-semibold tracking-tight sm:text-5xl">
+        {[0, 1].map((dup) => (
+          <div key={dup} className="flex shrink-0 items-center gap-10 pr-10" aria-hidden={dup === 1}>
+            <span>{fmt.num(k.pedidos)} pedidos</span><Star />
+            <span className="text-outline">{fmt.pct(k.incidencias)} con incidencia</span><Star />
+            <span>{fmt.dec1(k.transito)} días de tránsito</span><Star />
+            <span className="text-outline">{regiones} regiones</span><Star />
+            <span>{fmt.pct(k.sla)} a tiempo</span><Star />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -318,11 +403,11 @@ function Kpi({ label, value, format, accent = 'text-white', delay }) {
   )
 }
 
-function Donut({ data, format, centerLabel }) {
+function Donut({ data, format, centerLabel, compact = false }) {
   const total = data.reduce((s, d) => s + d.value, 0)
   return (
-    <div className="px-6 pb-6">
-      <div className="relative mx-auto h-56 w-full max-w-[260px]">
+    <div className={`px-6 pb-6 ${compact ? 'sm:flex sm:items-center sm:gap-8' : ''}`}>
+      <div className={`relative mx-auto h-56 w-full max-w-[240px] ${compact ? 'sm:mx-0 sm:shrink-0' : ''}`}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Tooltip content={<ChartTooltip formatter={format} />} />
@@ -338,7 +423,7 @@ function Donut({ data, format, centerLabel }) {
           </div>
         </div>
       </div>
-      <ul className="mt-4 space-y-2 text-sm">
+      <ul className="mt-4 w-full space-y-2 text-sm">
         {data.map((d, i) => (
           <li key={d.name} className="flex items-center justify-between gap-3">
             <span className="flex items-center gap-2 text-[#d6d6de]">
@@ -372,9 +457,9 @@ function Explorer({ rows }) {
   const visibles = lista.slice(p * PAGE, p * PAGE + PAGE)
 
   return (
-    <Card className="mt-4 overflow-hidden">
+    <Card className="overflow-hidden">
       <CardHeader
-        eyebrow="Explorador"
+        eyebrow="Registros"
         title={`${fmt.num(lista.length)} pedidos`}
         right={
           <label className="relative block">
@@ -440,7 +525,7 @@ function Star() {
 
 function Skeleton() {
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div className="mt-10 grid grid-cols-2 gap-4 lg:grid-cols-4">
       <div className="card col-span-2 row-span-2 h-[316px] animate-pulse" />
       {[0, 1, 2, 3].map((i) => <div key={i} className="card h-[150px] animate-pulse" />)}
       <p className="col-span-2 text-sm text-muted lg:col-span-4">Cargando 10.000 pedidos desde Supabase…</p>
