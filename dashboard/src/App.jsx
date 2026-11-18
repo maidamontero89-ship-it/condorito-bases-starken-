@@ -122,7 +122,7 @@ export default function App() {
         )}
 
         {/* ------------------------------------------------ Filtros */}
-        <div className="card sticky top-3 z-20 mb-6 flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="card z-20 mb-6 lg:sticky lg:top-3 flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-6">
             <Chips options={ZONAS} value={zona} onChange={setZona} />
             <span className="hidden h-6 w-px bg-white/10 md:block" />
