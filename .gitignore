@@ -5,6 +5,7 @@
 
 # Dependencias y entornos
 node_modules/
+dist/
 .venv/
 venv/
 __pycache__/
