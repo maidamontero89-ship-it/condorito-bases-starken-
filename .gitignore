@@ -1,0 +1,25 @@
+# Credenciales y variables de entorno
+.env
+.env.*
+!.env.example
+
+# Dependencias y entornos
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Supabase local
+supabase/.temp/
+supabase/.branches/
+
+# Sistema / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Archivos temporales de Office
+~$*
